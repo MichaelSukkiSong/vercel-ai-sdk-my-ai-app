@@ -34,7 +34,81 @@ function getFlightInfo(flightNumber: string) {
 }
 
 async function submitUserMessage(userInput: string) {
+  "use server";
+
   const aiState = getMutableAIState<typeof AI>();
+
+  aiState.update([
+    ...aiState.get(),
+    {
+      role: "user",
+      content: userInput,
+    },
+  ]);
+
+  const ui = render({
+    model: "gpt-4-0125-preview",
+    provider: openai,
+    messages: [
+      { role: "system", content: "You are a flight assistant" },
+      { role: "user", content: userInput },
+    ],
+
+    // `text` is called when an AI returns a text response (as opposed to a tool call).
+    // Its content is streamed from the LLM, so this function will be called
+    // multiple times with `content` being incremental.
+    text: ({ content, done }) => {
+      // When it's the final content, mark the state as done and ready for the client to access.
+      if (done) {
+        aiState.done([
+          ...aiState.get(),
+          {
+            role: "assistant",
+            content,
+          },
+        ]);
+      }
+
+      return <p>{content}</p>;
+    },
+
+    tools: {
+      get_flight_info: {
+        description: "Get the information for a flight",
+        parameters: z
+          .object({
+            flightNumber: z.string().describe("the number of the flight"),
+          })
+          .required(),
+        render: async function* ({ flightNumber }) {
+          // Show a spinner on the client while we wait for the response.
+          yield <Spinner />;
+
+          // Fetch the flight information from an external API.
+          const flightInfo = await getFlightInfo(flightNumber);
+
+          // Update the final AI state.
+          aiState.done([
+            ...aiState.get(),
+            {
+              role: "function",
+              name: "get_flight_info",
+              // Content can be any string to provide context to the LLM in the rest of the conversation.
+              content: JSON.stringify(flightInfo),
+            },
+          ]);
+
+          // Return the flight card to the client.
+          return <FlightCard flightInfo={flightInfo} />;
+        },
+      },
+    },
+  });
+
+  return {
+    id: Date.now(),
+    display: ui,
+  };
 }
 
 // Define the initial state of the AI. It can be any JSON object.
