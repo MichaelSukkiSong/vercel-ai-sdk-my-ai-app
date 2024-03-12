@@ -9,7 +9,7 @@ const openai = new OpenAI({
 // An example of a spinner component. You can also import your own components,
 // or 3rd party component libraries.
 function Spinner() {
-  return <div>Loading...</div>;
+  return <div>Loading....</div>;
 }
 
 // An example of a flight card component.
